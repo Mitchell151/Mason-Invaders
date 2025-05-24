@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Invaders - Shopping Trolley Edition</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+        
+        #gameContainer {
+            position: relative;
+            background: #000;
+        }
+        
+        canvas {
+            border: 2px solid #00ff00;
+            display: block;
+            background: #000;
+        }
+        
+        #ui {
+            position: absolute;
+            top: -40px;
+            left: 0;
+            right: 0;
+            color: #00ff00;
+            font-size: 18px;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 10px;
+        }
+        
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: #00ff00;
+            padding: 30px;
+            border: 2px solid #00ff00;
+            text-align: center;
+            display: none;
+            z-index: 20;
+        }
+        
+        button {
+            background: #000;
+            color: #00ff00;
+            border: 2px solid #00ff00;
+            padding: 10px 20px;
+            font-size: 16px;
+            font-family: 'Courier New', monospace;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+        
+        button:hover {
+            background: #00ff00;
+            color: #000;
+        }
+        
+        #instructions {
+            position: absolute;
+            bottom: -80px;
+            left: 0;
+            right: 0;
+            color: #00ff00;
+            font-size: 12px;
+            text-align: center;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="ui">
+            <div>SCORE: <span id="score">0000</span></div>
+            <div>LIVES: <span id="lives">3</span></div>
+            <div>LEVEL: <span id="level">1</span></div>
+        </div>
+        
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
+        <div id="instructions">
+            ← → MOVE | SPACE FIRE | Destroy all shopping trolleys!
+        </div>
+        
+        <div id="gameOver">
+            <h2 id="gameOverTitle">GAME OVER</h2>
+            <p id="finalScore"></p>
+            <button onclick="restartGame()">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game state
+        let gameState = {
+            score: 0,
+            lives: 3,
+            level: 1,
+            gameOver: false,
+            invaderDirection: 1,
+            invaderSpeed: 1,
+            invaderDropDistance: 20,
+            nextInvaderMove: 0,
+            invaderMoveDelay: 30
+        };
+        
+        // Input handling
+        const keys = {};
+        let lastShotTime = 0;
+        const shotCooldown = 200; // milliseconds
+        
+        // Player
+        let player = {
+            x: canvas.width / 2 - 25,
+            y: canvas.height - 60,
+            width: 50,
+            height: 40,
+            speed: 5
+        };
+        
+        // Bullets
+        let bullets = [];
+        let invaderBullets = [];
+        
+        // Invaders (shopping trolleys)
+        let invaders = [];
+        
+        // Player image (your photo)
+        let playerImg = new Image();
+        playerImg.src = 'data:image/svg+xml;base64,' + btoa(`
+            <svg width="50" height="40" xmlns="http://www.w3.org/2000/svg">
+                <rect width="50" height="40" fill="#00ff00" stroke="#00ff00" stroke-width="2"/>
+                <text x="25" y="25" text-anchor="middle" fill="#000" font-family="Arial" font-size="8">PLAYER</text>
+            </svg>
+        `);
+        
+        function createInvaderGrid() {
+            invaders = [];
+            const rows = 5;
+            const cols = 10;
+            const invaderWidth = 40;
+            const invaderHeight = 30;
+            const startX = 80;
+            const startY = 80;
+            const spacingX = 60;
+            const spacingY = 50;
+            
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    invaders.push({
+                        x: startX + col * spacingX,
+                        y: startY + row * spacingY,
+                        width: invaderWidth,
+                        height: invaderHeight,
+                        alive: true,
+                        points: row < 2 ? 30 : row < 4 ? 20 : 10
+                    });
+                }
+            }
+        }
+        
+        function drawShoppingTrolley(x, y, width, height) {
+            ctx.save();
+            ctx.translate(x + width/2, y + height/2);
+            
+            // Shopping trolley body
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 2;
+            ctx.fillStyle = '#000';
+            
+            // Main basket
+            ctx.fillRect(-width/3, -height/3, width*2/3, height*2/3);
+            ctx.strokeRect(-width/3, -height/3, width*2/3, height*2/3);
+            
+            // Handle
+            ctx.beginPath();
+            ctx.moveTo(-width/3, -height/3);
+            ctx.lineTo(-width/2, -height/2);
+            ctx.stroke();
+            
+            // Wheels
+            ctx.beginPath();
+            ctx.arc(-width/4, height/3, 3, 0,
